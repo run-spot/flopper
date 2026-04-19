@@ -63,8 +63,144 @@ typedef void (^KmpSonarReceiver)(NSDictionary*, id<KmpFlipperResponder>);
 
 @end
 
+@interface FlopperKmpFallbackConnection : NSObject <KmpFlipperConnection>
+@property(nonatomic, strong) NSMutableDictionary<NSString*, KmpSonarReceiver>* receivers;
+@end
+
+@implementation FlopperKmpFallbackConnection
+
+- (instancetype)init {
+  if (self = [super init]) {
+    _receivers = [NSMutableDictionary dictionary];
+  }
+  return self;
+}
+
+- (void)send:(NSString*)method withParams:(NSDictionary*)params {
+  KmpSonarReceiver receiver = self.receivers[method];
+  if (receiver != nil) {
+    receiver(params ?: @{}, nil);
+  }
+}
+
+- (void)send:(NSString*)method withRawParams:(NSString*)params {
+  KmpSonarReceiver receiver = self.receivers[method];
+  if (receiver != nil) {
+    receiver(params == nil ? @{} : @{@"raw" : params}, nil);
+  }
+}
+
+- (void)send:(NSString*)method withArrayParams:(NSArray*)params {
+  KmpSonarReceiver receiver = self.receivers[method];
+  if (receiver != nil) {
+    receiver(@{@"items" : params ?: @[]}, nil);
+  }
+}
+
+- (void)receive:(NSString*)method withBlock:(KmpSonarReceiver)receiver {
+  if (method != nil && receiver != nil) {
+    self.receivers[method] = [receiver copy];
+  }
+}
+
+- (void)errorWithMessage:(NSString*)message stackTrace:(NSString*)stacktrace {
+}
+
+@end
+
+@interface FlopperKmpFallbackClient : NSObject
+@property(nonatomic, strong) NSMutableArray<id<KmpFlipperPlugin>>* plugins;
+@property(nonatomic, strong) FlopperKmpFallbackConnection* connection;
+@property(nonatomic, assign, getter=isStarted) BOOL started;
+@end
+
+@implementation FlopperKmpFallbackClient
+
++ (instancetype)sharedClient {
+  static FlopperKmpFallbackClient* sharedClient = nil;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    sharedClient = [FlopperKmpFallbackClient new];
+  });
+  return sharedClient;
+}
+
+- (instancetype)init {
+  if (self = [super init]) {
+    _plugins = [NSMutableArray array];
+    _connection = [FlopperKmpFallbackConnection new];
+  }
+  return self;
+}
+
+- (void)addPlugin:(id<KmpFlipperPlugin>)plugin {
+  if (plugin == nil) {
+    return;
+  }
+  [self.plugins addObject:plugin];
+  if (self.started) {
+    [plugin didConnect:self.connection];
+  }
+}
+
+- (void)removePlugin:(id<KmpFlipperPlugin>)plugin {
+  if (plugin == nil) {
+    return;
+  }
+  if ([self.plugins containsObject:plugin]) {
+    if (self.started) {
+      [plugin didDisconnect];
+    }
+    [self.plugins removeObject:plugin];
+  }
+}
+
+- (id)pluginWithIdentifier:(NSString*)identifier {
+  for (id<KmpFlipperPlugin> plugin in self.plugins) {
+    if ([[plugin identifier] isEqualToString:identifier]) {
+      return plugin;
+    }
+  }
+  return nil;
+}
+
+- (void)start {
+  self.started = YES;
+  for (id<KmpFlipperPlugin> plugin in self.plugins) {
+    [plugin didConnect:self.connection];
+  }
+}
+
+- (void)stop {
+  if (!self.started) {
+    return;
+  }
+  for (id<KmpFlipperPlugin> plugin in self.plugins) {
+    [plugin didDisconnect];
+  }
+  self.started = NO;
+}
+
+- (NSString*)getState {
+  return self.started ? @"CONNECTED" : @"DISCONNECTED";
+}
+
+- (NSArray<NSDictionary*>*)getStateElements {
+  return @[
+    @{@"name" : @"transport", @"state" : self.started ? @"fallback-connected" : @"fallback-idle"},
+    @{@"name" : @"plugins", @"state" : [NSString stringWithFormat:@"%lu", (unsigned long)self.plugins.count]},
+  ];
+}
+
+- (BOOL)isConnected {
+  return self.started;
+}
+
+@end
+
 static Class flopper_client_class(void) {
-  return NSClassFromString(@"FlipperClient");
+  Class runtimeClass = NSClassFromString(@"FlipperClient");
+  return runtimeClass ?: [FlopperKmpFallbackClient class];
 }
 
 static id flopper_invoke0(id target, SEL selector) {
