@@ -135,11 +135,14 @@ You can find the resulting artifact in the `dist/` folder.
 ```bash
 ./gradlew :flopper-ios:assembleFlopperKitKmpXCFramework
 swift package describe
+./scripts/verify-apple-xcframework.sh
 ```
 
 The generated XCFramework is placed under `flopper-ios/build/XCFrameworks/release`
 and can be consumed locally via the repository `Package.swift` manifest or embedded
 from Xcode using `embedAndSignAppleFrameworkForXcode`.
+The smoke-build script validates the podless path by compiling the sample host
+source against `FlopperKitKmp.xcframework` and the generated Apple shim archive.
 
 ## Android SDK + Sample app
 
