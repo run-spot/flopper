@@ -1,31 +1,6 @@
 import UIKit
 import FlopperKitKmp
 
-private func jsonString(_ value: Any) -> String? {
-  guard JSONSerialization.isValidJSONObject(value) else {
-    return nil
-  }
-  guard let data = try? JSONSerialization.data(withJSONObject: value, options: []) else {
-    return nil
-  }
-  return String(data: data, encoding: .utf8)
-}
-
-private func headersArray(_ headers: [AnyHashable: Any]?) -> [[String: String]] {
-  guard let headers else {
-    return []
-  }
-  return headers.compactMap { key, value in
-    guard let valueString = value as? CustomStringConvertible else {
-      return nil
-    }
-    return [
-      "key": key.description,
-      "value": valueString.description,
-    ]
-  }
-}
-
 final class RuntimePlugin: NSObject, FlopperPlugin {
   let id = "podless-runtime"
   let runInBackground = false
@@ -35,71 +10,6 @@ final class RuntimePlugin: NSObject, FlopperPlugin {
   }
 
   func onDisconnect() {}
-}
-
-final class NetworkProbePlugin: NSObject, FlopperPlugin {
-  let id = "Network"
-  let runInBackground = false
-
-  private var connection: FlopperConnection?
-
-  func onConnect(connection: FlopperConnection) {
-    self.connection = connection
-    sendProbeRequest()
-  }
-
-  func onDisconnect() {
-    connection = nil
-  }
-
-  private func sendProbeRequest() {
-    guard let connection,
-          let url = URL(string: "https://jsonplaceholder.typicode.com/todos/1") else {
-      return
-    }
-
-    var request = URLRequest(url: url)
-    request.httpMethod = "GET"
-    request.addValue("application/json", forHTTPHeaderField: "Accept")
-
-    let requestId = UUID().uuidString
-    let requestPayload: [String: Any] = [
-      "id": requestId,
-      "timestamp": Date().timeIntervalSince1970 * 1000,
-      "method": request.httpMethod ?? "GET",
-      "url": request.url?.absoluteString ?? url.absoluteString,
-      "headers": headersArray(request.allHTTPHeaderFields),
-      "data": NSNull(),
-    ]
-    connection.send(method: "newRequest", payload: jsonString(requestPayload))
-
-    URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
-      guard let self, let connection = self.connection else {
-        return
-      }
-
-      let httpResponse = response as? HTTPURLResponse
-      let bodyText: Any
-      if let data, let utf8 = String(data: data, encoding: .utf8) {
-        bodyText = utf8
-      } else if let error {
-        bodyText = error.localizedDescription
-      } else {
-        bodyText = NSNull()
-      }
-
-      let responsePayload: [String: Any] = [
-        "id": requestId,
-        "timestamp": Date().timeIntervalSince1970 * 1000,
-        "status": httpResponse?.statusCode ?? 0,
-        "reason": HTTPURLResponse.localizedString(forStatusCode: httpResponse?.statusCode ?? 0),
-        "headers": headersArray(httpResponse?.allHeaderFields),
-        "data": bodyText,
-        "isMock": false,
-      ]
-      connection.send(method: "newResponse", payload: jsonString(responsePayload))
-    }.resume()
-  }
 }
 
 final class RuntimeViewController: UIViewController {
@@ -144,7 +54,11 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     )
     let client = FlopperClient.companion.create(config: config)
     client.addPlugin(plugin: RuntimePlugin())
-    client.addPlugin(plugin: NetworkProbePlugin())
+    client.addPlugin(plugin: IosNetworkProbePlugin(
+      urlString: "https://jsonplaceholder.typicode.com/todos/1",
+      requestHeaderName: "Accept",
+      requestHeaderValue: "application/json"
+    ))
     client.start()
 
     let summary = client.getStateSummary().entries
