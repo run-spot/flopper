@@ -136,6 +136,7 @@ You can find the resulting artifact in the `dist/` folder.
 ./gradlew :flopper-ios:assembleFlopperKitKmpXCFramework
 swift package describe
 ./scripts/verify-apple-xcframework.sh
+./scripts/run-podless-host-app.sh --smoke
 ```
 
 The generated XCFramework is placed under `flopper-ios/build/XCFrameworks/release`
@@ -143,6 +144,9 @@ and can be consumed locally via the repository `Package.swift` manifest or embed
 from Xcode using `embedAndSignAppleFrameworkForXcode`.
 The smoke-build script validates the podless path by compiling the sample host
 source against `FlopperKitKmp.xcframework` and the generated Apple shim archive.
+For a manual simulator check, run `./scripts/run-podless-host-app.sh --interactive`.
+The script auto-picks an available iPhone simulator, installs `PodlessHostApp`,
+and keeps the app alive on screen so the runtime state can be inspected visually.
 
 ## Android SDK + Sample app
 
