@@ -1,5 +1,6 @@
 import UIKit
 import FlopperKitKmp
+import Foundation
 
 final class RuntimePlugin: NSObject, FlopperPlugin {
   let id = "podless-runtime"
@@ -14,6 +15,8 @@ final class RuntimePlugin: NSObject, FlopperPlugin {
 
 final class RuntimeViewController: UIViewController {
   private let statusLabel = UILabel()
+  private let triggerButton = UIButton(type: .system)
+  var onTriggerRequest: (() -> Void)?
 
   override func viewDidLoad() {
     super.viewDidLoad()
@@ -24,16 +27,36 @@ final class RuntimeViewController: UIViewController {
     statusLabel.textColor = .label
     statusLabel.translatesAutoresizingMaskIntoConstraints = false
 
-    view.addSubview(statusLabel)
+    triggerButton.translatesAutoresizingMaskIntoConstraints = false
+    triggerButton.setTitle("Send API Request", for: .normal)
+    triggerButton.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
+    triggerButton.backgroundColor = .systemBlue
+    triggerButton.setTitleColor(.white, for: .normal)
+    triggerButton.layer.cornerRadius = 12
+    triggerButton.contentEdgeInsets = UIEdgeInsets(top: 14, left: 20, bottom: 14, right: 20)
+    triggerButton.addTarget(self, action: #selector(handleTriggerTap), for: .touchUpInside)
+
+    let stackView = UIStackView(arrangedSubviews: [triggerButton, statusLabel])
+    stackView.axis = .vertical
+    stackView.spacing = 24
+    stackView.translatesAutoresizingMaskIntoConstraints = false
+
+    view.addSubview(stackView)
     NSLayoutConstraint.activate([
-      statusLabel.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20),
-      statusLabel.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
-      statusLabel.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+      stackView.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20),
+      stackView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
+      stackView.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+      triggerButton.heightAnchor.constraint(equalToConstant: 50),
     ])
   }
 
   func updateStatus(_ payload: String) {
     statusLabel.text = payload
+  }
+
+  @objc
+  private func handleTriggerTap() {
+    onTriggerRequest?()
   }
 }
 
@@ -42,6 +65,11 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
   var window: UIWindow?
   private let runtimeViewController = RuntimeViewController()
   private var flopperClient: FlopperClient?
+  private let networkProbePlugin = IosNetworkProbePlugin(
+    urlString: "https://jsonplaceholder.typicode.com/todos/1",
+    requestHeaderName: "Accept",
+    requestHeaderValue: "application/json"
+  )
 
   private func renderStatus() {
     guard let client = flopperClient else {
@@ -76,14 +104,19 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     let client = FlopperClient.companion.create(config: config)
     flopperClient = client
     client.addPlugin(plugin: RuntimePlugin())
-    client.addPlugin(plugin: IosNetworkProbePlugin(
-      urlString: "https://jsonplaceholder.typicode.com/todos/1",
-      requestHeaderName: "Accept",
-      requestHeaderValue: "application/json"
-    ))
+    client.addPlugin(plugin: networkProbePlugin)
     client.start()
+    NSLog("FLOPPER-APP launched state=%@", client.getState())
 
     window = UIWindow(frame: UIScreen.main.bounds)
+    runtimeViewController.onTriggerRequest = { [weak self] in
+      NSLog("FLOPPER-APP send API request tapped")
+      self?.networkProbePlugin.triggerRequest()
+      self?.renderStatus()
+      DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+        self?.renderStatus()
+      }
+    }
     window?.rootViewController = runtimeViewController
     window?.makeKeyAndVisible()
     renderStatus()

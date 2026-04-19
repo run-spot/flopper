@@ -310,6 +310,10 @@ static NSString* flopper_device_name(void) {
 #else
   UIDevice* device = [UIDevice currentDevice];
 #if TARGET_OS_SIMULATOR
+  NSString* simulatorName = NSProcessInfo.processInfo.environment[@"SIMULATOR_DEVICE_NAME"];
+  if (simulatorName.length > 0) {
+    return simulatorName;
+  }
   return [NSString stringWithFormat:@"%@ Simulator", device.model ?: @"iOS"];
 #else
   return device.name ?: device.model ?: @"iOS";
@@ -318,6 +322,12 @@ static NSString* flopper_device_name(void) {
 }
 
 static NSString* flopper_device_identifier(void) {
+#if TARGET_OS_SIMULATOR
+  NSString* simulatorUDID = NSProcessInfo.processInfo.environment[@"SIMULATOR_UDID"];
+  if (simulatorUDID.length > 0) {
+    return simulatorUDID;
+  }
+#endif
   static NSString* const key = @"com.runspot.flopper.kmp.browserDeviceId";
   NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
   NSString* existing = [defaults stringForKey:key];

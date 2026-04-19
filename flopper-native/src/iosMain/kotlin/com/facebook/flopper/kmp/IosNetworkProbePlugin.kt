@@ -3,6 +3,7 @@ package com.facebook.flopper.kmp
 import platform.Foundation.NSData
 import platform.Foundation.NSError
 import platform.Foundation.NSHTTPURLResponse
+import platform.Foundation.NSLog
 import platform.Foundation.NSMutableURLRequest
 import platform.Foundation.NSURL
 import platform.Foundation.NSURLSession
@@ -22,14 +23,13 @@ class IosNetworkProbePlugin(
 
   override fun onConnect(connection: FlopperConnection) {
     this.connection = connection
-    sendProbeRequest()
   }
 
   override fun onDisconnect() {
     connection = null
   }
 
-  private fun sendProbeRequest() {
+  fun triggerRequest() {
     val connection = connection ?: return
     val url = NSURL.URLWithString(urlString) ?: return
     val request = NSMutableURLRequest.requestWithURL(url)
@@ -42,6 +42,7 @@ class IosNetworkProbePlugin(
     )
 
     val requestId = "${platform.Foundation.NSDate().timeIntervalSince1970}-${Random.nextInt(1000, 9999)}"
+    NSLog("FLOPPER-NETWORK request started id=$requestId url=$urlString")
     connection.send(
         method = "newRequest",
         payload = jsonObject(
@@ -63,6 +64,11 @@ class IosNetworkProbePlugin(
         else -> null
       }
       val statusCode = httpResponse?.statusCode?.toInt() ?: 0
+      if (error != null) {
+        NSLog("FLOPPER-NETWORK request failed id=$requestId error=${error.localizedDescription}")
+      } else {
+        NSLog("FLOPPER-NETWORK response received id=$requestId status=$statusCode")
+      }
 
       activeConnection.send(
           method = "newResponse",
