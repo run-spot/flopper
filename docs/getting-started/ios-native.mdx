@@ -10,111 +10,59 @@ import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
 
 :::note
-Swift and Objective-C are supported for Flipper with CocoaPods as build and distribution mechanism.
+Swift and Objective-C are supported for Flopper with XCFramework and Swift Package Manager as the primary Apple distribution mechanism.
 :::
 
-## CocoaPods
+## Swift Package Manager
 
-The following configuration assumes CocoaPods 1.9+:
+Build the Apple artifact from the repository root:
 
-```ruby
-project 'MyApp.xcodeproj'
-flipperkit_version = '0.250.0'
-
-target 'MyApp' do
-  platform :ios, '10.0'
-
-  # It is likely that you'll only want to include Flipper in debug builds,
-  # in which case you add the `:configuration` directive:
-  pod 'FlipperKit', '~>' + flipperkit_version, :configuration => 'Debug'
-  pod 'FlipperKit/FlipperKitLayoutComponentKitSupport', '~>' + flipperkit_version, :configuration => 'Debug'
-  pod 'FlipperKit/SKIOSNetworkPlugin', '~>' + flipperkit_version, :configuration => 'Debug'
-  pod 'FlipperKit/FlipperKitUserDefaultsPlugin', '~>' + flipperkit_version, :configuration => 'Debug'
-  # ...unfortunately at this time that means you'll need to explicitly mark
-  # transitive dependencies as being for debug build only as well:
-  pod 'Flipper-DoubleConversion', :configuration => 'Debug'
-  pod 'Flipper-Folly', :configuration => 'Debug'
-  pod 'Flipper-Glog', :configuration => 'Debug'
-  pod 'Flipper-PeerTalk', :configuration => 'Debug'
-  pod 'CocoaLibEvent', :configuration => 'Debug'
-  pod 'boost-for-react-native', :configuration => 'Debug'
-  pod 'OpenSSL-Universal', :configuration => 'Debug'
-  pod 'CocoaAsyncSocket', :configuration => 'Debug'
-  # ...except, of course, those transitive dependencies that your
-  # application itself depends, e.g.:
-  pod 'ComponentKit', '~> 0.31'
-
-  # If you use `use_frameworks!` in your Podfile,
-  # uncomment the below $static_framework array and also
-  # the pre_install section.  This will cause Flipper and
-  # it's dependencies to be built as a static library and all other pods to
-  # be dynamic.
-  #
-  # NOTE Doing this may lead to a broken build if any of these are also
-  #      transitive dependencies of other dependencies and are expected
-  #      to be built as frameworks.
-  #
-  # $static_framework = ['FlipperKit', 'Flipper', 'Flipper-Folly',
-  #   'CocoaAsyncSocket', 'ComponentKit', 'Flipper-DoubleConversion',
-  #   'Flipper-Glog', 'Flipper-PeerTalk', 'Flipper-RSocket', 'Yoga', 'YogaKit',
-  #   'CocoaLibEvent', 'OpenSSL-Universal', 'boost-for-react-native', 'Flipper-Fmt']
-  #
-  # pre_install do |installer|
-  #   Pod::Installer::Xcode::TargetValidator.send(:define_method, :verify_no_static_framework_transitive_dependencies) {}
-  #   installer.pod_targets.each do |pod|
-  #       if $static_framework.include?(pod.name)
-  #         def pod.build_type;
-  #           Pod::BuildType.static_library
-  #         end
-  #       end
-  #     end
-  # end
-end
+```bash
+./gradlew :flopper-ios:assembleFlopperKitKmpXCFramework
+swift package describe
 ```
 
-## For pure Objective-C projects
+The local package manifest points to the generated XCFramework at:
 
-For pure Objective-C projects, add the following to your settings:
+```bash
+flopper-ios/build/XCFrameworks/release/FlopperKitKmp.xcframework
+```
 
-1. `/usr/lib/swift` as the first entry of the `LD_RUNPATH_SEARCH_PATHS`
-2. Add the following in `LIBRARY_SEARCH_PATHS`
+For Xcode wrapper applications built from Kotlin Multiplatform, keep the normal
+`embedAndSignAppleFrameworkForXcode` build phase and add the generated framework
+to the app target if you need a direct Apple-side dependency.
 
-  ```bash
-  "\"$(TOOLCHAIN_DIR)/usr/lib/swift/$(PLATFORM_NAME)\"",
-  "\"$(TOOLCHAIN_DIR)/usr/lib/swift-5.0/$(PLATFORM_NAME)\"",
-  ```
+For external Apple apps, consume the generated `Package.swift` from a release
+artifact where `FlopperKitKmp.xcframework.zip` is published as a Swift Package
+`binaryTarget`.
 
-3. If, after following the above two steps, there are still errors such as `Undefined symbol _swift_getFunctionReplacement`, then set `DEAD_CODE_STRIPPING` to `YES`. The reference for this fix is in the [Swift forum](https://forums.swift.org/t/undefined-symbol-swift-getfunctionreplacement/30495/4)
+## Kotlin Multiplatform client
 
-This is done to overcome a bug with Xcode 11 which fails to compile Swift code when bitcode is enabled. Flipper transitively depends on YogaKit, which is written in Swift.
-For more information about this issue, refer to the Swift code [tweet](https://twitter.com/krzyzanowskim/status/1151549874653081601?s=21) and [Github issue](https://github.com/Carthage/Carthage/issues/2825).
+The KMP entrypoint lives under `flopper-native` and exposes a common API:
 
-Install the dependencies by running `pod install`. You can now import and initialize Flipper in yourAppDelegate.
+```kotlin
+val client = FlopperClient.create(
+  FlopperConfig.Ios(
+    appName = "MyApp",
+  ),
+)
+client.start()
+```
+
+Use `FlopperConfig.Android(contextHandle = applicationContext)` on Android and
+share plugin definitions from `commonMain`.
 
 <Tabs defaultValue="objC" values={[{ label: 'ObjC', value: 'objC'}, { label: 'Swift', value: 'swift'}]}>
 <TabItem value="objC">
 
 ```objc
-#import <FlipperKit/FlipperClient.h>
-#import <FlipperKitLayoutPlugin/FlipperKitLayoutPlugin.h>
-#import <FlipperKitLayoutComponentKitSupport/FlipperKitLayoutComponentKitSupport.h>
-#import <FlipperKitUserDefaultsPlugin/FKUserDefaultsPlugin.h>
-#import <FlipperKitNetworkPlugin/FlipperKitNetworkPlugin.h>
-#import <SKIOSNetworkPlugin/SKIOSNetworkAdapter.h>
+#import <FlopperKitKmp/FlopperKitKmp.h>
 
 @implementation AppDelegate
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
-  FlipperClient *client = [FlipperClient sharedClient];
-  SKDescriptorMapper *layoutDescriptorMapper = [[SKDescriptorMapper alloc] initWithDefaults];
-  [FlipperKitLayoutComponentKitSupport setUpWithDescriptorMapper: layoutDescriptorMapper];
-  [client addPlugin: [[FlipperKitLayoutPlugin alloc] initWithRootNode: application
-                                                 withDescriptorMapper: layoutDescriptorMapper]];
-
-  [client addPlugin:[[FKUserDefaultsPlugin alloc] initWithSuiteName:nil]];
-  [client addPlugin: [[FlipperKitNetworkPlugin alloc] initWithNetworkAdapter:[SKIOSNetworkAdapter new]]];
-  [client start];
+  // Apple apps can link the generated XCFramework directly or through SPM.
   ...
 }
 @end
@@ -125,7 +73,7 @@ Install the dependencies by running `pod install`. You can now import and initia
 
 ```swift
 import UIKit
-import FlipperKit
+import FlopperKitKmp
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
 
@@ -133,12 +81,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
 
   func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-    // Override point for customization after application launch.
-    let client = FlipperClient.shared()
-    let layoutDescriptorMapper = SKDescriptorMapper(defaults: ())
-    FlipperKitLayoutComponentKitSupport.setUpWith(layoutDescriptorMapper)
-    client?.add(FlipperKitLayoutPlugin(rootNode: application, with: layoutDescriptorMapper!))
-    client?.start()
+    // Build the XCFramework from Gradle, then import the binary package in Xcode.
     return true
   }
 }
