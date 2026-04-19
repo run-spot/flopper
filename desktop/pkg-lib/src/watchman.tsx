@@ -28,13 +28,14 @@ export default class Watchman {
     this.client.setMaxListeners(250);
     await new Promise<void>((resolve, reject) => {
       const onError = (err: Error) => {
-        // TODO: Fix this the next time the file is edited.
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        this.client!.removeAllListeners('error');
+        const client = this.client;
+        if (client) {
+          client.removeAllListeners('error');
+        }
         reject(err);
-        // TODO: Fix this the next time the file is edited.
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        this.client!.end();
+        if (client) {
+          client.end();
+        }
         delete this.client;
       };
 
