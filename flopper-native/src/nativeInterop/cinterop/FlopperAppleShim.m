@@ -191,6 +191,7 @@ typedef void (^KmpSonarReceiver)(NSDictionary*, id<KmpFlipperResponder>);
 @interface FlopperKmpBrowserClient : NSObject <NSURLSessionWebSocketDelegate, FlopperKmpBrowserClientMessaging>
 @property(nonatomic, strong) NSMutableArray<id<KmpFlipperPlugin>>* plugins;
 @property(nonatomic, strong) NSMutableDictionary<NSString*, FlopperKmpBrowserConnection*>* connections;
+@property(nonatomic, strong) NSMutableArray<NSDictionary*>* pendingMessages;
 @property(nonatomic, strong) NSURLSession* session;
 @property(nonatomic, strong) NSURLSessionWebSocketTask* socketTask;
 @property(nonatomic, assign, getter=isStarted) BOOL started;
@@ -365,6 +366,7 @@ static id flopper_json_safe_payload(id payload) {
 
 @synthesize plugins = _plugins;
 @synthesize connections = _connections;
+@synthesize pendingMessages = _pendingMessages;
 @synthesize session = _session;
 @synthesize socketTask = _socketTask;
 @synthesize started = _started;
@@ -384,6 +386,7 @@ static id flopper_json_safe_payload(id payload) {
   if (self = [super init]) {
     _plugins = [NSMutableArray array];
     _connections = [NSMutableDictionary dictionary];
+    _pendingMessages = [NSMutableArray array];
     _transportState = @"fallback-idle";
   }
   return self;
@@ -448,6 +451,7 @@ static id flopper_json_safe_payload(id payload) {
   self.started = NO;
   self.desktopConnected = NO;
   self.transportState = @"fallback-idle";
+  [self.pendingMessages removeAllObjects];
   [self.socketTask cancelWithCloseCode:NSURLSessionWebSocketCloseCodeNormalClosure reason:nil];
   self.socketTask = nil;
   [self.session invalidateAndCancel];
@@ -458,7 +462,16 @@ static id flopper_json_safe_payload(id payload) {
 }
 
 - (NSString*)getState {
-  return self.started ? @"CONNECTED" : @"DISCONNECTED";
+  if (!self.started) {
+    return @"DISCONNECTED";
+  }
+  if (self.desktopConnected || [self.transportState hasPrefix:@"fallback-connected"]) {
+    return @"CONNECTED";
+  }
+  if ([self.transportState hasPrefix:@"browser"]) {
+    return @"CONNECTING";
+  }
+  return @"CONNECTED";
 }
 
 - (NSArray<NSDictionary*>*)getStateElements {
@@ -477,7 +490,7 @@ static id flopper_json_safe_payload(id payload) {
 }
 
 - (BOOL)isConnected {
-  return self.started;
+  return self.started && (self.desktopConnected || [self.transportState hasPrefix:@"fallback-connected"]);
 }
 
 - (void)connectToDesktop {
@@ -571,7 +584,18 @@ static id flopper_json_safe_payload(id payload) {
 }
 
 - (void)sendJSONObject:(NSDictionary*)json {
-  if (!self.desktopConnected || self.socketTask == nil || json == nil) {
+  if (json == nil) {
+    return;
+  }
+
+  if (self.socketTask == nil) {
+    return;
+  }
+
+  if (!self.desktopConnected) {
+    if (self.started) {
+      [self.pendingMessages addObject:json];
+    }
     return;
   }
 
@@ -614,6 +638,11 @@ static id flopper_json_safe_payload(id payload) {
   didOpenWithProtocol:(NSString*)protocol {
   self.desktopConnected = YES;
   self.transportState = @"browser-connected";
+  NSArray<NSDictionary*>* queuedMessages = [self.pendingMessages copy];
+  [self.pendingMessages removeAllObjects];
+  for (NSDictionary* message in queuedMessages) {
+    [self sendJSONObject:message];
+  }
 }
 
 - (void)URLSession:(NSURLSession*)session
@@ -621,6 +650,7 @@ static id flopper_json_safe_payload(id payload) {
 didCloseWithCode:(NSURLSessionWebSocketCloseCode)closeCode
             reason:(NSData*)reason {
   self.desktopConnected = NO;
+  [self.pendingMessages removeAllObjects];
   if (self.started) {
     self.transportState = @"fallback-connected";
   }

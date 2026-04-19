@@ -41,25 +41,12 @@ final class RuntimeViewController: UIViewController {
 final class AppDelegate: UIResponder, UIApplicationDelegate {
   var window: UIWindow?
   private let runtimeViewController = RuntimeViewController()
+  private var flopperClient: FlopperClient?
 
-  func application(
-      _ application: UIApplication,
-      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
-  ) -> Bool {
-    let config = FlopperConfigIos(
-        appName: "PodlessHostApp",
-        deviceModel: UIDevice.current.model,
-        osVersion: UIDevice.current.systemVersion,
-        enabled: true
-    )
-    let client = FlopperClient.companion.create(config: config)
-    client.addPlugin(plugin: RuntimePlugin())
-    client.addPlugin(plugin: IosNetworkProbePlugin(
-      urlString: "https://jsonplaceholder.typicode.com/todos/1",
-      requestHeaderName: "Accept",
-      requestHeaderValue: "application/json"
-    ))
-    client.start()
+  private func renderStatus() {
+    guard let client = flopperClient else {
+      return
+    }
 
     let summary = client.getStateSummary().entries
         .map { "\($0.name)=\($0.state)" }
@@ -73,14 +60,43 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     let outputURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("flopper-runtime.txt")
     try? payload.write(to: outputURL, atomically: true, encoding: String.Encoding.utf8)
+    runtimeViewController.updateStatus(payload)
+  }
+
+  func application(
+      _ application: UIApplication,
+      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+  ) -> Bool {
+    let config = FlopperConfigIos(
+        appName: "PodlessHostApp",
+        deviceModel: UIDevice.current.model,
+        osVersion: UIDevice.current.systemVersion,
+        enabled: true
+    )
+    let client = FlopperClient.companion.create(config: config)
+    flopperClient = client
+    client.addPlugin(plugin: RuntimePlugin())
+    client.addPlugin(plugin: IosNetworkProbePlugin(
+      urlString: "https://jsonplaceholder.typicode.com/todos/1",
+      requestHeaderName: "Accept",
+      requestHeaderValue: "application/json"
+    ))
+    client.start()
 
     window = UIWindow(frame: UIScreen.main.bounds)
-    runtimeViewController.updateStatus(payload)
     window?.rootViewController = runtimeViewController
     window?.makeKeyAndVisible()
+    renderStatus()
+    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+      self?.renderStatus()
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
+      self?.renderStatus()
+    }
 
     if ProcessInfo.processInfo.environment["FLOPPER_EXIT_AFTER_LAUNCH"] == "1" {
-      DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+      DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+        self?.renderStatus()
         client.stop()
         exit(0)
       }
