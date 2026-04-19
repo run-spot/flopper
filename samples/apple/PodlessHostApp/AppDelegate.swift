@@ -12,9 +12,35 @@ final class RuntimePlugin: NSObject, FlopperPlugin {
   func onDisconnect() {}
 }
 
+final class RuntimeViewController: UIViewController {
+  private let statusLabel = UILabel()
+
+  override func viewDidLoad() {
+    super.viewDidLoad()
+
+    view.backgroundColor = .systemBackground
+    statusLabel.numberOfLines = 0
+    statusLabel.font = .monospacedSystemFont(ofSize: 16, weight: .regular)
+    statusLabel.textColor = .label
+    statusLabel.translatesAutoresizingMaskIntoConstraints = false
+
+    view.addSubview(statusLabel)
+    NSLayoutConstraint.activate([
+      statusLabel.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20),
+      statusLabel.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
+      statusLabel.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+    ])
+  }
+
+  func updateStatus(_ payload: String) {
+    statusLabel.text = payload
+  }
+}
+
 @main
 final class AppDelegate: UIResponder, UIApplicationDelegate {
   var window: UIWindow?
+  private let runtimeViewController = RuntimeViewController()
 
   func application(
       _ application: UIApplication,
@@ -44,12 +70,15 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     try? payload.write(to: outputURL, atomically: true, encoding: String.Encoding.utf8)
 
     window = UIWindow(frame: UIScreen.main.bounds)
-    window?.rootViewController = UIViewController()
+    runtimeViewController.updateStatus(payload)
+    window?.rootViewController = runtimeViewController
     window?.makeKeyAndVisible()
 
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-      client.stop()
-      exit(0)
+    if ProcessInfo.processInfo.environment["FLOPPER_EXIT_AFTER_LAUNCH"] == "1" {
+      DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+        client.stop()
+        exit(0)
+      }
     }
 
     return true

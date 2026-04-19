@@ -56,7 +56,8 @@ xcrun --sdk iphonesimulator swiftc \
 
 xcrun simctl bootstatus "${SIMULATOR_ID}" -b || xcrun simctl boot "${SIMULATOR_ID}"
 xcrun simctl install "${SIMULATOR_ID}" "${APP_DIR}"
-xcrun simctl launch --terminate-running-process "${SIMULATOR_ID}" "${APP_BUNDLE_ID}" >/dev/null
+SIMCTL_CHILD_FLOPPER_EXIT_AFTER_LAUNCH=1 \
+  xcrun simctl launch --terminate-running-process "${SIMULATOR_ID}" "${APP_BUNDLE_ID}" >/dev/null
 sleep 2
 
 APP_CONTAINER="$(xcrun simctl get_app_container "${SIMULATOR_ID}" "${APP_BUNDLE_ID}" data)"
