@@ -5,6 +5,8 @@ apply plugin: 'org.jetbrains.kotlin.multiplatform'
 apply plugin: 'maven-publish'
 
 def flopperKitKmp = new XCFrameworkConfig(project, 'FlopperKitKmp')
+def flopperAppleShimOutputDir = layout.buildDirectory.dir('XCFrameworks/release')
+def flopperAppleShimOutput = new File(flopperAppleShimOutputDir.get().asFile, 'FlopperAppleShim.xcframework')
 def appleShimTargets = [
         iosArm64: true,
         iosSimulatorArm64: true,
@@ -51,4 +53,57 @@ kotlin {
             }
         }
     }
+}
+
+def nativeShimHeaderDir = project(':flopper-native').file('src/nativeInterop/cinterop')
+def nativeShimBuildDir = project(':flopper-native').layout.buildDirectory
+def simulatorFatShimDir = layout.buildDirectory.dir('apple-shim/iosSimulatorFat')
+def simulatorFatShimArchive = new File(simulatorFatShimDir.get().asFile, 'libFlopperAppleShim.a')
+
+tasks.register('createFlopperAppleShimSimulatorFatArchive', Exec) {
+    dependsOn(
+            project(':flopper-native').tasks.named('compileFlopperAppleShimIosSimulatorArm64'),
+            project(':flopper-native').tasks.named('compileFlopperAppleShimIosX64'),
+    )
+
+    def simulatorArm64Archive = new File(nativeShimBuildDir.get().asFile, 'apple-shim/iosSimulatorArm64/libFlopperAppleShim.a')
+    def simulatorX64Archive = new File(nativeShimBuildDir.get().asFile, 'apple-shim/iosX64/libFlopperAppleShim.a')
+
+    doFirst {
+        simulatorFatShimDir.get().asFile.mkdirs()
+    }
+
+    commandLine '/bin/zsh', '-lc', """
+        set -euo pipefail
+        xcrun lipo -create \
+          "${simulatorArm64Archive.absolutePath}" \
+          "${simulatorX64Archive.absolutePath}" \
+          -output "${simulatorFatShimArchive.absolutePath}"
+    """.stripIndent()
+}
+
+tasks.register('assembleFlopperAppleShimXCFramework', Exec) {
+    dependsOn(
+            project(':flopper-native').tasks.named('compileFlopperAppleShimIosArm64'),
+            tasks.named('createFlopperAppleShimSimulatorFatArchive'),
+    )
+
+    def deviceArchive = new File(nativeShimBuildDir.get().asFile, 'apple-shim/iosArm64/libFlopperAppleShim.a')
+
+    doFirst {
+        flopperAppleShimOutputDir.get().asFile.mkdirs()
+        delete(flopperAppleShimOutput)
+    }
+
+    commandLine '/bin/zsh', '-lc', """
+        set -euo pipefail
+        xcodebuild -create-xcframework \
+          -library "${deviceArchive.absolutePath}" -headers "${nativeShimHeaderDir.absolutePath}" \
+          -library "${simulatorFatShimArchive.absolutePath}" -headers "${nativeShimHeaderDir.absolutePath}" \
+          -output "${flopperAppleShimOutput.absolutePath}"
+    """.stripIndent()
+}
+
+tasks.matching { it.name == 'assembleFlopperKitKmpXCFramework' }.configureEach {
+    finalizedBy(tasks.named('assembleFlopperAppleShimXCFramework'))
 }
