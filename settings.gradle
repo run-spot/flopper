@@ -48,3 +48,15 @@ project(':jetpack-compose-plugin').projectDir = file('android/plugins/jetpack-co
 
 include ':inspection-lib'
 project(':inspection-lib').projectDir = file('android/plugins/inspection-lib')
+
+include ':flopper-core'
+project(':flopper-core').projectDir = file('flopper-core')
+
+include ':flopper-android'
+project(':flopper-android').projectDir = file('flopper-android')
+
+include ':flopper-native'
+project(':flopper-native').projectDir = file('flopper-native')
+
+include ':flopper-ios'
+project(':flopper-ios').projectDir = file('flopper-ios')

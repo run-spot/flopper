@@ -1,0 +1,98 @@
+import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
+
+apply plugin: 'com.android.library'
+apply plugin: 'org.jetbrains.kotlin.multiplatform'
+apply plugin: 'maven-publish'
+
+def shimSourceFile = file('src/nativeInterop/cinterop/FlopperAppleShim.m')
+def shimHeaderDir = file('src/nativeInterop/cinterop')
+def appleShimTargets = [
+        iosArm64: [sdk: 'iphoneos', arch: 'arm64', deploymentFlag: '-mios-version-min=13.0'],
+        iosSimulatorArm64: [sdk: 'iphonesimulator', arch: 'arm64', deploymentFlag: '-mios-simulator-version-min=13.0'],
+        iosX64: [sdk: 'iphonesimulator', arch: 'x86_64', deploymentFlag: '-mios-simulator-version-min=13.0'],
+]
+
+kotlin {
+    androidTarget()
+    iosX64()
+    iosArm64()
+    iosSimulatorArm64()
+
+    targets.withType(KotlinNativeTarget).configureEach {
+        if (appleShimTargets.containsKey(it.name)) {
+            def appleShimTarget = appleShimTargets[it.name]
+            def capitalizedTarget = it.name.substring(0, 1).toUpperCase() + it.name.substring(1)
+            def targetOutputDir = layout.buildDirectory.dir("apple-shim/${it.name}")
+            def compileAppleShimTask = tasks.register("compileFlopperAppleShim${capitalizedTarget}", Exec) {
+                def outputDir = targetOutputDir.get().asFile
+                def objectFile = new File(outputDir, 'FlopperAppleShim.o')
+                def archiveFile = new File(outputDir, 'libFlopperAppleShim.a')
+                doFirst {
+                    outputDir.mkdirs()
+                }
+                commandLine '/bin/zsh', '-lc', """
+                    set -euo pipefail
+                    SDKROOT=\$(xcrun --sdk ${appleShimTarget.sdk} --show-sdk-path)
+                    xcrun --sdk ${appleShimTarget.sdk} clang \
+                      -fobjc-arc \
+                      -fblocks \
+                      -arch ${appleShimTarget.arch} \
+                      -isysroot "\$SDKROOT" \
+                      ${appleShimTarget.deploymentFlag} \
+                      -c "${shimSourceFile.absolutePath}" \
+                      -o "${objectFile.absolutePath}"
+                    libtool -static -o "${archiveFile.absolutePath}" "${objectFile.absolutePath}"
+                """.stripIndent()
+            }
+
+            it.compilations.main.cinterops.create('flopperAppleShim') {
+                defFile(project.file('src/nativeInterop/cinterop/flopperAppleShim.def'))
+                compilerOpts("-I${shimHeaderDir.absolutePath}")
+            }
+
+            it.compilations.main.compileTaskProvider.configure {
+                dependsOn(compileAppleShimTask)
+            }
+
+            it.binaries.all { binary ->
+                binary.linkerOpts(
+                        "-L${targetOutputDir.get().asFile.absolutePath}",
+                        '-lFlopperAppleShim',
+                        '-framework', 'Foundation',
+                )
+            }
+        }
+    }
+
+    sourceSets {
+        commonMain {
+            dependencies {
+                api project(':flopper-core')
+            }
+        }
+        commonTest {
+            dependencies {
+                implementation kotlin('test')
+            }
+        }
+        androidMain {
+            dependencies {
+                implementation project(':flopper-android')
+            }
+        }
+    }
+}
+
+android {
+    namespace 'com.facebook.flopper.kmp.bridge'
+    compileSdkVersion rootProject.compileSdkVersion
+
+    defaultConfig {
+        minSdkVersion rootProject.minSdkVersion
+    }
+
+    compileOptions {
+        targetCompatibility rootProject.javaTargetVersion
+        sourceCompatibility rootProject.javaTargetVersion
+    }
+}
