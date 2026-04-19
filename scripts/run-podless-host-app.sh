@@ -9,7 +9,71 @@ BUILD_DIR="${ROOT_DIR}/build/verify/podless-host-app"
 APP_DIR="${BUILD_DIR}/PodlessHostApp.app"
 APP_BINARY="${APP_DIR}/PodlessHostApp"
 APP_BUNDLE_ID="com.runspot.flopper.PodlessHostApp"
-SIMULATOR_ID="${1:-33BB2225-5CB6-48CD-A12B-96B45AC8844E}"
+MODE="smoke"
+SIMULATOR_ID=""
+SHOULD_REBUILD=0
+
+pick_simulator_id() {
+  local booted_id
+  booted_id="$(xcrun simctl list devices booted | awk -F '[()]' '/iPhone/ {print $(NF-1); exit}')"
+  if [[ -n "${booted_id}" ]]; then
+    echo "${booted_id}"
+    return
+  fi
+
+  xcrun simctl list devices available | awk -F '[()]' '/iPhone/ {print $(NF-1); exit}'
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --interactive)
+      MODE="interactive"
+      shift
+      ;;
+    --smoke)
+      MODE="smoke"
+      shift
+      ;;
+    --rebuild)
+      SHOULD_REBUILD=1
+      shift
+      ;;
+    --simulator-id)
+      SIMULATOR_ID="${2:-}"
+      shift 2
+      ;;
+    *)
+      if [[ -z "${SIMULATOR_ID}" ]]; then
+        SIMULATOR_ID="$1"
+        shift
+      else
+        echo "error: unsupported argument '$1'" >&2
+        exit 1
+      fi
+      ;;
+  esac
+done
+
+SIMULATOR_ID="${SIMULATOR_ID:-$(pick_simulator_id)}"
+
+if [[ -z "${SIMULATOR_ID}" ]]; then
+  echo "error: no available iPhone simulator found" >&2
+  exit 1
+fi
+
+if [[ "${SHOULD_REBUILD}" == "1" ]]; then
+  (cd "${ROOT_DIR}" && ./gradlew --no-daemon :flopper-ios:assembleFlopperKitKmpXCFramework)
+fi
+
+if [[ ! -d "${FRAMEWORK_DIR}" ]]; then
+  echo "error: missing XCFramework slice at ${FRAMEWORK_DIR}. Run ./gradlew :flopper-ios:assembleFlopperKitKmpXCFramework first or pass --rebuild." >&2
+  exit 1
+fi
+
+if [[ ! -f "${SHIM_ARCHIVE}" ]]; then
+  echo "error: missing Apple shim archive at ${SHIM_ARCHIVE}. Run ./gradlew :flopper-ios:assembleFlopperKitKmpXCFramework first or pass --rebuild." >&2
+  exit 1
+fi
 
 mkdir -p "${APP_DIR}"
 
@@ -54,8 +118,15 @@ xcrun --sdk iphonesimulator swiftc \
   "${SHIM_ARCHIVE}" \
   -o "${APP_BINARY}"
 
+open -a Simulator >/dev/null 2>&1 || true
 xcrun simctl bootstatus "${SIMULATOR_ID}" -b || xcrun simctl boot "${SIMULATOR_ID}"
 xcrun simctl install "${SIMULATOR_ID}" "${APP_DIR}"
+
+if [[ "${MODE}" == "interactive" ]]; then
+  xcrun simctl launch --console-pty --terminate-running-process "${SIMULATOR_ID}" "${APP_BUNDLE_ID}"
+  exit 0
+fi
+
 SIMCTL_CHILD_FLOPPER_EXIT_AFTER_LAUNCH=1 \
   xcrun simctl launch --terminate-running-process "${SIMULATOR_ID}" "${APP_BUNDLE_ID}" >/dev/null
 sleep 2
