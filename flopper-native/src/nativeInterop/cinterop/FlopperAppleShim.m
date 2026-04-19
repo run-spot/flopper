@@ -614,8 +614,6 @@ static id flopper_json_safe_payload(id payload) {
   didOpenWithProtocol:(NSString*)protocol {
   self.desktopConnected = YES;
   self.transportState = @"browser-connected";
-  NSArray<NSString*>* plugins = [self.plugins valueForKey:@"identifier"];
-  [self sendJSONObject:@{@"app" : flopper_bundle_name(), @"type" : @"connect", @"plugins" : plugins ?: @[]}];
 }
 
 - (void)URLSession:(NSURLSession*)session
