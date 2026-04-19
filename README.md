@@ -8,8 +8,8 @@
   <a href="https://search.maven.org/artifact/com.facebook.flipper/flipper">
     <img src="https://img.shields.io/maven-central/v/com.facebook.flipper/flipper" alt="Android Maven Badge" />
   </a>
-  <a href="https://cocoapods.org/pods/Flipper">
-    <img src="https://img.shields.io/cocoapods/v/FlipperKit.svg?label=iOS&color=blue" alt="iOS" />
+  <a href="https://github.com/run-spot/flopper/blob/main/Package.swift">
+    <img src="https://img.shields.io/badge/iOS-SPM%20%2B%20XCFramework-blue" alt="iOS" />
   </a>
 </p>
 
@@ -133,15 +133,13 @@ You can find the resulting artifact in the `dist/` folder.
 ## iOS SDK + Sample App
 
 ```bash
-cd iOS/Sample
-rm -f Podfile.lock
-pod install --repo-update
-open Sample.xcworkspace
-<Run app from xcode>
+./gradlew :flopper-ios:assembleFlopperKitKmpXCFramework
+swift package describe
 ```
 
-You can omit `--repo-update` to speed up the installation, but watch out as you
-may be building against outdated dependencies.
+The generated XCFramework is placed under `flopper-ios/build/XCFrameworks/release`
+and can be consumed locally via the repository `Package.swift` manifest or embedded
+from Xcode using `embedAndSignAppleFrameworkForXcode`.
 
 ## Android SDK + Sample app
 

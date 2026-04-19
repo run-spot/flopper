@@ -1,0 +1,32 @@
+import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
+import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFrameworkConfig
+
+apply plugin: 'org.jetbrains.kotlin.multiplatform'
+apply plugin: 'maven-publish'
+
+def flopperKitKmp = new XCFrameworkConfig(project, 'FlopperKitKmp')
+
+kotlin {
+    iosX64()
+    iosArm64()
+    iosSimulatorArm64()
+
+    targets.withType(KotlinNativeTarget).configureEach {
+        binaries.framework {
+            baseName = 'FlopperKitKmp'
+            isStatic = true
+            export(project(':flopper-native'))
+            transitiveExport = true
+            freeCompilerArgs += ['-Xbinary=bundleId=com.runspot.flopper.kmp']
+            flopperKitKmp.add(it)
+        }
+    }
+
+    sourceSets {
+        commonMain {
+            dependencies {
+                api project(':flopper-native')
+            }
+        }
+    }
+}

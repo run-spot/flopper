@@ -47,6 +47,18 @@ subprojects {
     }
 }
 
+allprojects {
+    repositories {
+        google()
+        mavenLocal()
+        mavenCentral()
+
+        if (isSnapshot()) {
+            maven { url 'https://oss.sonatype.org/content/repositories/snapshots/' }
+        }
+    }
+}
+
 ext {
     minSdkVersion = 15
     targetSdkVersion = 34

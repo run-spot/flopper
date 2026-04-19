@@ -1,0 +1,42 @@
+apply plugin: 'com.android.library'
+apply plugin: 'org.jetbrains.kotlin.multiplatform'
+apply plugin: 'maven-publish'
+
+kotlin {
+    androidTarget()
+    iosX64()
+    iosArm64()
+    iosSimulatorArm64()
+
+    sourceSets {
+        commonMain {
+            dependencies {
+                api project(':flopper-core')
+            }
+        }
+        commonTest {
+            dependencies {
+                implementation kotlin('test')
+            }
+        }
+        androidMain {
+            dependencies {
+                implementation project(':flopper-android')
+            }
+        }
+    }
+}
+
+android {
+    namespace 'com.facebook.flopper.kmp.bridge'
+    compileSdkVersion rootProject.compileSdkVersion
+
+    defaultConfig {
+        minSdkVersion rootProject.minSdkVersion
+    }
+
+    compileOptions {
+        targetCompatibility rootProject.javaTargetVersion
+        sourceCompatibility rootProject.javaTargetVersion
+    }
+}
