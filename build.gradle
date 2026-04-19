@@ -27,6 +27,9 @@ ext.isSnapshot = { VERSION_NAME.endsWith('-SNAPSHOT') }
 ext.isRelease = { ['publish', 'publishToMavenLocal'].any { gradle.startParameter.taskNames.contains(it) } }
 
 subprojects {
+    group = GROUP
+    version = VERSION_NAME
+
     repositories {
         google()
         mavenLocal()
@@ -48,6 +51,9 @@ subprojects {
 }
 
 allprojects {
+    group = GROUP
+    version = VERSION_NAME
+
     repositories {
         google()
         mavenLocal()
