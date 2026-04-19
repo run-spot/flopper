@@ -34,3 +34,5 @@ jobs:
         run: ./gradlew :flopper-ios:assembleFlopperKitKmpXCFramework
       - name: Validate local Swift Package manifest
         run: swift package describe
+      - name: Verify podless Apple smoke build
+        run: ./scripts/verify-apple-xcframework.sh

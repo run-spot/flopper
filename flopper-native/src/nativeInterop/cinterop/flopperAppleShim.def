@@ -1,0 +1,2 @@
+headers = FlopperAppleShim.h
+package = com.facebook.flopper.kmp.apple.shim
